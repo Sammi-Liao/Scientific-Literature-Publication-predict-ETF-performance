@@ -1,0 +1,14 @@
+# Keep Docker context small. The running app only needs code plus cached artifacts.
+data/
+outputs/
+notebooks/
+*.json
+
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+.env
+

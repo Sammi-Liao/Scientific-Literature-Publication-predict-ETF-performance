@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Literature Signals & Sector Returns</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <main class="container">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Literature Analytics Platform</p>
+          <h1>Do scientific publication trends predict sector ETF moves?</h1>
+          <p class="subtitle">
+            Explore Granger tests and rolling model results for medical devices and biotechnology industries.
+          </p>
+        </div>
+        <label class="selector">
+          Industry
+          <select id="industry-select">
+            {% for key, config in industries.items() %}
+            <option value="{{ key }}">{{ config.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </header>
+
+      <section id="status" class="status"></section>
+
+      <section class="cards" id="summary-cards"></section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2>Literature Lift by Horizon</h2>
+          <p class="hint">
+            Positive lift means the literature-augmented model performed better than the
+            market-only baseline. Regression lift is RMSE reduction; classification lift
+            is accuracy gain across 1-8 week horizons.
+          </p>
+          <canvas id="horizon-chart"></canvas>
+        </article>
+        <article class="panel">
+          <h2>Significant Granger Signals</h2>
+          <div class="table-wrap">
+            <table id="granger-table"></table>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Best Model Comparison</h2>
+        <p class="hint">
+          Baseline uses market features only. Literature adds publication volume,
+          growth, keyword mix, subfield mix, funding, and core-journal signals.
+          Models are evaluated with rolling monthly train/test windows.
+        </p>
+        <div class="table-wrap comparison-table-wrap">
+          <table id="comparison-table"></table>
+        </div>
+      </section>
+    </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
+

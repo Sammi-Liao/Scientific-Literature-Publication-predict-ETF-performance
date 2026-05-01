@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local environments
+.venv/
+venv/
+env/
+.env
+
+# Notebook noise
+.ipynb_checkpoints/
+
+# Large raw/source data - regenerate locally, do not commit
+data/raw/
+data/market/
+*.json
+
+# Exploratory notebooks and scratch outputs
+outputs/
+
+# Keep deployable cached app artifacts under artifacts/
+!artifacts/
+!artifacts/**/
+!artifacts/**/*.csv
+!artifacts/**/*.json
+
