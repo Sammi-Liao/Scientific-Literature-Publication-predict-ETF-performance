@@ -76,3 +76,13 @@ def literature():
     rows = read_csv_artifact(industry, "daily_literature_features.csv")
     return jsonify(rows)
 
+
+@bp.get("/api/market")
+def market():
+    industry = request.args.get("industry", "medical_devices")
+    path = artifact_path(industry, "modeling_dataset_sample.csv")
+    if not path.exists():
+        return jsonify([])
+    df = pd.read_csv(path, usecols=["date", "ticker", "adj_close"])
+    return jsonify(df.where(pd.notna(df), None).to_dict(orient="records"))
+

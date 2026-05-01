@@ -1,8 +1,11 @@
 let horizonChart;
+let publicationChart;
+let etfChart;
 
 const industrySelect = document.getElementById("industry-select");
 const statusEl = document.getElementById("status");
 const cardsEl = document.getElementById("summary-cards");
+const modelMetricsEl = document.getElementById("model-metrics");
 
 const tickerLinks = {
   IHI: "https://www.ishares.com/us/products/239519/ishares-us-medical-devices-etf",
@@ -72,6 +75,142 @@ function renderTickerLinks(tickers) {
 function displayValue(row, col) {
   const value = col.format ? col.format(row[col.key]) : row[col.key];
   return value ?? "";
+}
+
+function mean(values) {
+  const nums = values.map(Number).filter((value) => Number.isFinite(value));
+  if (!nums.length) return null;
+  return nums.reduce((sum, value) => sum + value, 0) / nums.length;
+}
+
+function horizonMeanScores(comparison, task) {
+  const rows = comparison.filter(
+    (row) => row.task === task && Number(row.horizon_weeks) >= 5 && Number(row.horizon_weeks) <= 8
+  );
+  return {
+    baseline: mean(rows.map((row) => row.baseline_score)),
+    literature: mean(rows.map((row) => row.lit_score)),
+  };
+}
+
+function renderPublicationChart(literatureRows) {
+  const rows = literatureRows
+    .filter((row) => row.date)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const labels = rows.map((row) => row.date);
+  const data = rows.map((row) => Number(row.daily_pubs_30d_avg ?? row.daily_pubs));
+
+  if (publicationChart) publicationChart.destroy();
+  publicationChart = new Chart(document.getElementById("publication-chart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "30-day avg publications",
+          data,
+          borderColor: "#2f6fed",
+          backgroundColor: "rgba(47,111,237,0.12)",
+          pointRadius: 0,
+          tension: 0.25,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "bottom" } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, maxRotation: 0 } },
+        y: { title: { display: true, text: "Publications" } },
+      },
+    },
+  });
+}
+
+function renderEtfChart(marketRows, tickers) {
+  const rowsByTicker = new Map(tickers.map((ticker) => [ticker, []]));
+  marketRows.forEach((row) => {
+    if (rowsByTicker.has(row.ticker) && row.date && row.adj_close !== null) {
+      rowsByTicker.get(row.ticker).push(row);
+    }
+  });
+
+  const labels = [
+    ...new Set(
+      marketRows
+        .filter((row) => tickers.includes(row.ticker) && row.date)
+        .map((row) => row.date)
+    ),
+  ].sort();
+  const colors = ["#C9C8C5", "#10a37f"];
+  const datasets = tickers.map((ticker, idx) => {
+    const tickerRows = rowsByTicker.get(ticker).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const priceByDate = Object.fromEntries(tickerRows.map((row) => [row.date, Number(row.adj_close)]));
+    return {
+      label: ticker,
+      data: labels.map((date) => {
+        const price = priceByDate[date];
+        return Number.isFinite(price) ? price : null;
+      }),
+      borderColor: colors[idx % colors.length],
+      backgroundColor: idx === 0 ? "rgba(193,157,242,0.18)" : "rgba(16,163,127,0.12)",
+      pointRadius: 0,
+      tension: 0.25,
+    };
+  });
+
+  if (etfChart) etfChart.destroy();
+  etfChart = new Chart(document.getElementById("etf-chart"), {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "bottom" } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, maxRotation: 0 } },
+        y: { title: { display: true, text: "Adjusted close" } },
+      },
+    },
+  });
+}
+
+function renderModelMetrics(comparison) {
+  const classification = horizonMeanScores(comparison, "classification");
+  const regression = horizonMeanScores(comparison, "regression");
+  modelMetricsEl.innerHTML = `
+    <article class="metric-card">
+      <div>
+        <div class="label">Mean Accuracy,<br>Horizons 5-8 Weeks</div>
+        <div class="metric-note">Classification models, higher is better</div>
+      </div>
+      <div class="metric-pair">
+        <div>
+          <span>Baseline</span>
+          <strong>${fmt(classification.baseline, 4)}</strong>
+        </div>
+        <div>
+          <span>Literature</span>
+          <strong>${fmt(classification.literature, 4)}</strong>
+        </div>
+      </div>
+    </article>
+    <article class="metric-card">
+      <div>
+        <div class="label">Mean RMSE,<br>Horizons 5-8 Weeks</div>
+        <div class="metric-note">Regression models, lower is better</div>
+      </div>
+      <div class="metric-pair">
+        <div>
+          <span>Baseline</span>
+          <strong>${fmt(regression.baseline, 4)}</strong>
+        </div>
+        <div>
+          <span>Literature</span>
+          <strong>${fmt(regression.literature, 4)}</strong>
+        </div>
+      </div>
+    </article>
+  `;
 }
 
 function renderCards(summary, comparison) {
@@ -288,14 +427,19 @@ function renderInteractiveTable(el, rows, columns, focusKey = null) {
 }
 
 async function loadIndustry(industry) {
-  statusEl.textContent = "Loading cached artifacts...";
+  statusEl.textContent = "";
   try {
-    const [summary, granger, comparison] = await Promise.all([
+    const [summary, granger, comparison, literature, market] = await Promise.all([
       fetchJson(`/api/summary?industry=${industry}`),
       fetchJson(`/api/granger?industry=${industry}&significant=true`),
       fetchJson(`/api/comparison?industry=${industry}`),
+      fetchJson(`/api/literature?industry=${industry}`),
+      fetchJson(`/api/market?industry=${industry}`),
     ]);
+    renderPublicationChart(literature);
+    renderEtfChart(market, summary.tickers);
     renderCards(summary, comparison);
+    renderModelMetrics(comparison);
     renderHorizonChart(summary);
     renderTable(document.getElementById("granger-table"), granger, [
       { key: "ticker", label: "Ticker" },
@@ -315,10 +459,11 @@ async function loadIndustry(industry) {
       { key: "lit_score", label: "Literature Score", format: (v) => fmt(v, 4), filter: false },
       { key: "lit_helps", label: "Lift", format: (v) => fmt(v, 4), filter: false, defaultSort: "desc" },
     ]);
-    statusEl.textContent = `Loaded ${summary.label} cached results.`;
+    statusEl.textContent = "";
   } catch (error) {
     statusEl.textContent = error.message;
     cardsEl.innerHTML = "";
+    modelMetricsEl.innerHTML = "";
   }
 }
 
